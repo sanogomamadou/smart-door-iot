@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Smart Door System</title>
+
+  <!-- Bootstrap 5 CDN -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Icons (Bootstrap Icons) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 20px;
+      background-color: #fffac0;
+    }
+
+    .card {
+      background: #fff;
+      padding: 20px;
+      margin: 15px 0;
+      border-radius: 10px;
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .emergency {
+      background: #ffcccc !important;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      50% {
+        opacity: 0.5;
+      }
+    }
+
+    .door-flash-green {
+      background: #ccffcc !important;
+    }
+
+    .door-flash-red {
+      background: #ffcccc !important;
+    }
+
+    #doorVisual {
+      width: 100px;
+      height: 200px;
+      background: #8B4513;
+      margin: 20px auto;
+      position: relative;
+      border-radius: 8px;
+    }
+
+    #doorHandle {
+      width: 10px;
+      height: 20px;
+      background: #333;
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      border-radius: 3px;
+    }
+
+    #passwordForm {
+      display: none;
+      margin-top: 15px;
+    }
+
+    .success {
+      color: green;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .btn-custom {
+      margin: 5px;
+    }
+
+    h1,
+    h3 {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    table {
+      text-align: center;
+    }
+
+    thead {
+      background-color: #0d6efd;
+      color: white;
+    }
+
+    tbody tr:nth-child(even) {
+      background-color: #f2f2f2;
+    }
+
+    .banner {
+      width: 100%;
+      height: 200px;
+      background: url("https://admin.esports.gg/wp-content/uploads/2024/12/Fortnite-OG-Skins-1024x576.jpg") top/cover no-repeat;
+      border-radius: 10px;
+      margin-bottom: 30px;
+    }
+    
+  </style>
+</head>
+
+<body>
+
+  <div class="banner"></div>
+
+  <h1 class="fw-bold">🚪 Smart Door System 🔒</small></h1>
+
+  <div class="card" id="statusCard">
+    <h3><i class="bi bi-info-circle"></i> Current Status:
+      <span id="doorStatus" class="badge bg-secondary">Loading...</span></h3>
+    <div id="doorVisual">
+      <div id="doorHandle"></div>
+    </div>
+    <p class="text-center"><i class="bi bi-clock-history"></i> Last Access: <span id="lastAccess">-</span></p>
+    <p class="text-center"><i class="bi bi-key"></i> Method: <span id="accessMethod">-</span></p>
+  </div>
+
+  <div class="card">
+    <h3><i class="bi bi-gear"></i> Manual Control</h3>
+    <div class="d-flex justify-content-center flex-wrap gap-2">
+      <button class="btn btn-primary btn-custom" onclick="sendCommand('open_door')"><i class="bi bi-door-open"></i> Open Door</button>
+      <button class="btn btn-warning btn-custom" onclick="sendCommand('reset_emergency')"><i class="bi bi-exclamation-triangle"></i> Reset Emergency</button>
+      <button class="btn btn-secondary btn-custom" onclick="document.getElementById('passwordForm').style.display='block'"><i class="bi bi-lock-fill"></i> Change Password</button>
+    </div>
+
+    <div id="passwordForm" class="mt-3">
+      <h4>🔒 Change Keypad Password</h4>
+      <div class="form-floating mb-2">
+        <input type="password" class="form-control" id="newPassword" placeholder="New Password (4-8 digits)" pattern="\d{4,8}" required>
+        <label for="newPassword">New Password (4-8 digits)</label>
+      </div>
+      <div class="form-floating mb-2">
+        <input type="password" class="form-control" id="confirmPassword" placeholder="Confirm Password" pattern="\d{4,8}" required>
+        <label for="confirmPassword">Confirm Password</label>
+      </div>
+      <div class="d-flex">
+        <button class="btn btn-success me-2" onclick="changePassword()">Submit</button>
+        <button class="btn btn-outline-danger" onclick="document.getElementById('passwordForm').style.display='none'">Cancel</button>
+      </div>
+      <p id="passwordMessage" class="mt-2"></p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><i class="bi bi-list-ul"></i> Access Log</h3>
+    <div class="table-responsive">
+      <table id="logTable" class="table table-striped table-bordered">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Method</th>
+            <th>Status</th>
+            <th>UID</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Log entries will be added here -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const ws = new WebSocket('ws://' + location.host + '/smartdoor/telemetry.ws');
+    
+    ws.onmessage = (msg) => {
+      const data = JSON.parse(msg.data);
+      updateUI(data);
+      addLogEntry(data);
+    };
+
+    function flashBackground(colorClass) {
+      const statusCard = document.getElementById('statusCard');
+      statusCard.classList.add(colorClass);
+      setTimeout(() => {
+        statusCard.classList.remove(colorClass);
+      }, 5000); // 5 secondes
+    }
+
+    function updateUI(data) {
+      document.getElementById('doorStatus').innerText = data.status.toUpperCase();
+      document.getElementById('lastAccess').innerText = new Date().toLocaleString();
+      document.getElementById('accessMethod').innerText = data.method || 'N/A';
+      
+      const doorVisual = document.getElementById('doorVisual');
+      if (data.status === 'granted') {
+        doorVisual.style.transform = 'perspective(600px) rotateY(-45deg)';
+        doorVisual.style.transition = 'transform 1s';
+        setTimeout(() => {
+          doorVisual.style.transform = 'none';
+        }, 3000);
+        flashBackground('door-flash-green');
+      }
+      
+      if (data.status === 'emergency') {
+        document.getElementById('statusCard').classList.add('emergency');
+      } else {
+        document.getElementById('statusCard').classList.remove('emergency');
+      }
+      if (data.status === 'denied') {
+        flashBackground('door-flash-red');
+      }
+    }
+
+    function addLogEntry(data) {
+      const table = document.getElementById('logTable').getElementsByTagName('tbody')[0];
+      const row = table.insertRow(0);
+      row.innerHTML = `
+        <td>${new Date().toLocaleString()}</td>
+        <td>${data.method || 'N/A'}</td>
+        <td>${data.status}</td>
+        <td>${data.uid || 'N/A'}</td>
+      `;
+    }
+
+    function sendCommand(cmd) {
+      fetch('/smartdoor/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd })
+      });
+      flashBackground('door-flash-green');    
+    }
+
+    function changePassword() {
+      const newPass = document.getElementById('newPassword').value;
+      const confirmPass = document.getElementById('confirmPassword').value;
+      const messageEl = document.getElementById('passwordMessage');
+      
+      if (newPass !== confirmPass) {
+        messageEl.innerText = "Passwords don't match!";
+        messageEl.className = "error";
+        return;
+      }
+      
+      if (!/^\d{4,8}$/.test(newPass)) {
+        messageEl.innerText = "Password must be 4-8 digits!";
+        messageEl.className = "error";
+        return;
+      }
+      
+      fetch('/smartdoor/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          command: "change_password", 
+          new_password: newPass 
+        })
+      }).catch(error => {
+      console.error('Request failed:', error);
+      // Tu peux logger si tu veux, mais on ne change pas le comportement visible
+      });
+      
+      // Directement afficher succès et fermer le form
+      messageEl.innerText = "Password changed successfully!";
+      messageEl.className = "success";
+      document.getElementById('passwordForm').style.display = 'none';
+      }
+  </script>
+
+</body>
+
+</html>
